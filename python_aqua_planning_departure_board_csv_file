@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+
+# webscraping from aqua software which is an in-house software to standardize quality assurance
+
+
+# import libraries
+import requests
+import json
+import time
+from fake_useragent import UserAgent
+from timeit import default_timer as timer
+from random_user_agent.user_agent import UserAgent
+from random_user_agent.params import SoftwareName, OperatingSystem
+from selenium.webdriver.chrome.options import Options
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.support import expected_conditions
+
+import webbrowser
+
+import sys
+import gc
+# change directory
+import os.path
+import glob
+#import python libraries
+import numpy
+from pandas import *
+# Import the plotting library 
+import matplotlib.pyplot as plt 
+from matplotlib.backends.backend_pdf import PdfPages
+import openpyxl
+from openpyxl import load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+
+#download data for today's date automatically
+from datetime import datetime, timedelta
+from datetime import date
+
+# clear all variables
+from IPython import get_ipython 
+
+# 
+import csv
+#
+import re
+#upload file in windows-> interacts with windows in Windows -> download use pip install -U pyautoit
+import autoit # 
+# presses keys on the keyboard wherever the cursor is sitting (works for browser or file explorer windows)
+import pyautogui
+# save data to sharepoint
+import shutil as sl
+    
+### Data Input ###    
+
+# Idea:
+# - export planning_departure_board for whole NSW 
+# - data from dec 2020-dec2022 (-12 to +12 months)
+
+#save file directory
+#filename_xlsx=('C:\\Users\\felix.bockelmann\GenesisCare\\NSW Physics - Physics Automation Scripts\\Planning_Departure_Board\\aqua_planning_departure_board.xlsx') # .xlsx or .csv depending on which function I am using
+filename_csv=('C:\\Users\\felix.bockelmann\GenesisCare\\NSW Physics - Physics Automation Scripts\\Planning_Departure_Board\\aqua_planning_departure_board.csv') # .xlsx or .csv depending on which function I am using
+#filename_csv_test=('C:/Users/public/python_work/aqua_planning_departure_board_test.csv') # .xlsx or .csv depending on which function I am using
+#filename_csv_teams_upload=('C:\\Users\\felix.bockelmann\GenesisCare\\NSW Physics - Physics Automation Scripts\\Planning_Departure_Board\\aqua_planning_departure_board.csv') # .xlsx or .csv depending on which function I am using
+
+# Define variables that are not allowed to be overwritten in code below
+start_time = time.time()
+start = timer()
+
+twelvetimes=12 # click arrow 12 times
+
+# all machine names in NSW aqua server2
+dataframe_header=['Date','Time','Patient','Patient Last Name','ID','Activity','RO','Dept.','Loc','Sim Date','VR','ID','PA','FC','SC']
+
+# handle execptions
+ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
+
+# URL
+url="http://departure.genesiscare.com.au/PlanningTriageListROA.aspx" # start link
+url2="https://genesiscare.sharepoint.com/sites/NSWPhysics/Shared%20Documents/Forms/AllItems.aspx?OR=Teams%2DHL&CT=1640048057347&id=%2Fsites%2FNSWPhysics%2FShared%20Documents%2FGeneral%2FPhysics%20Automation%20Scripts%2FPlanning%5FDeparture%5FBoard&viewid=c7ce78ed%2D72ef%2D4db2%2D8e82%2D90301e2f0746"
+
+#### create csv folder to save dataframe in here
+#csv_path, csv_file_ending = os.path.split(filename_csv)
+#csv_file, csv_ending = csv_file_ending.split('.')
+#csv_extension=csv_file+'.'+csv_ending
+#joined_path_csv_dataframe=os.path.join(csv_path,csv_extension)
+
+#### running program
+# running time 66mins
+
+#add options to Chrome webpage in clinical mode, when run in test mode just commment '--headless' mode
+options = webdriver.ChromeOptions() # code executes without prompting a window part 1 1 of 3
+options.add_argument('--headless') # code executes without prompting a window part 2 2 of 3 ####in test mode -> it promts a window -> displays what code is doing
+options.add_argument("--window-size=1440,810")# 1920,1080
+options.add_experimental_option("excludeSwitches", ["enable-automation"])
+options.add_experimental_option('useAutomationExtension', False)
+driver = webdriver.Chrome(options=options) # code executes without prompting a window part 3 3 of 3 //if error here, then wrong "chromedriver.exe" file was installed. Go to end of code to run "get the verison of chrome driver" 
+
+# open url
+driver.get(url) # open planning_departure_board webpage in url
+print('program started')
+
+# select date range
+time.sleep(1)
+# click on 1st calendar
+select_dateinput = WebDriverWait(driver,5,ignored_exceptions=ignored_exceptions)\
+        .until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR, "input[id='FeaturedContent_imgStartDate']")))
+#select_dateinput = driver.find_elements_by_css_selector("input[id='FeaturedContent_imgStartDate']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+select_dateinput = driver.find_elements(By.CSS_SELECTOR,"input[id='FeaturedContent_imgStartDate']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+select_dateinput[0].click()  # Focus input field
+time.sleep(1)
+# click on previous arrow 12 times for 12 months
+for i in range (twelvetimes):
+    #click_prev_arrow = driver.find_elements_by_css_selector("div[id='FeaturedContent_calStartDate_prevArrow']") # find date input field
+    click_prev_arrow = driver.find_elements(By.CSS_SELECTOR,"div[id='FeaturedContent_calStartDate_prevArrow']") # find date input field
+    click_prev_arrow[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+    time.sleep(1)
+
+# confirm date and click
+#click_confirm_date = driver.find_elements_by_css_selector("div[id='FeaturedContent_calStartDate_day_0_0']") # find date input field
+click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[id='FeaturedContent_calStartDate_day_0_0']") # find date input field
+save_startdate=click_confirm_date[0].text
+click_confirm_date[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+
+# click on 2nd calendar
+time.sleep(1) # time to let chrome open aqua before continuing with code
+select_dateinput = WebDriverWait(driver,5,ignored_exceptions=ignored_exceptions)\
+        .until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR, "input[id='FeaturedContent_imgFinishDate']")))
+#select_dateinput = driver.find_elements_by_css_selector("input[id='FeaturedContent_imgFinishDate']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+select_dateinput = driver.find_elements(By.CSS_SELECTOR,"input[id='FeaturedContent_imgFinishDate']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+select_dateinput[0].click()  # Focus input field
+# click on previous arrow 12 times for 12 months
+for i in range (twelvetimes):
+    #click_next_arrow = driver.find_elements_by_css_selector("div[id='FeaturedContent_calFinish_nextArrow']") # find date input field
+    click_next_arrow = driver.find_elements(By.CSS_SELECTOR,"div[id='FeaturedContent_calFinish_nextArrow']") # find date input field
+    click_next_arrow[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+    time.sleep(1)
+
+# confirm date and click
+#click_confirm_date = driver.find_elements_by_css_selector("div[id='FeaturedContent_calFinish_day_5_6']") # find date input field
+click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[id='FeaturedContent_calFinish_day_5_6']") # find date input field
+click_confirm_date[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+time.sleep(1) # time to let chrome open aqua before continuing with code
+
+# click refresh button
+#click_refresh_button = driver.find_elements_by_css_selector("input[id='FeaturedContent_btnRefresh']") # find date input field
+click_refresh_button = driver.find_elements(By.CSS_SELECTOR,"input[id='FeaturedContent_btnRefresh']") # find date input field
+click_refresh_button[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+time.sleep(5) # time to let chrome open aqua before continuing with code
+
+# get table from webpage
+#get_table_webpage_div = driver.find_elements_by_css_selector("div[id='FeaturedContent_grdData']") # get test results from most recent test during the day which is the last test in the list (when test was running multiple times during the day)
+get_table_webpage_div = driver.find_elements(By.CSS_SELECTOR,"div[id='FeaturedContent_grdData']") # get test results from most recent test during the day which is the last test in the list (when test was running multiple times during the day)
+
+element = driver.find_element(By.XPATH, "//*") # get source code of whole page
+source_code = element.get_attribute("innerHTML") # get html body only
+html_table=pandas.read_html(source_code) # convert html source code to get readout tables
+
+### Print data 
+#df = pandas.DataFrame(data=get_table_webpage_table_only)
+#df.columns = dataframe_header
+html_table[1].to_csv(filename_csv, sep=',',index=False)
+
+#writer = pandas.ExcelWriter(filename_xlsx, engine='openpyxl') # engine='openpyxl' #  xlsxwriter
+#html_table[1].to_excel(writer, sheet_name='NSW') # tab 1
+#writer.save()
+
+# save data to teams2
+# open url2 in teams -> folder directory where file needs to be saved at
+# driver.get(url2) # open planning_departure_board webpage in url
+# time.sleep(5)
+
+# # add username
+# elem = WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "input[id='i0116']"))) # positive: it waits until input is ready, negative: output comes as a list. Haven't found a way to convert a list to <class 'selenium.webdriver.remote.webelement.WebElement'>. therefore i need to add another line here
+# elem = driver.find_element(By.CSS_SELECTOR,"input[id='i0116']")# it has found username
+# elem.send_keys("felix.bockelmann@genesiscare.com") # add username
+# elem_next = driver.find_element(By.CSS_SELECTOR,"input[id='idSIButton9']")# it has found username
+# elem_next.click()
+# time.sleep(5)
+
+# #upload file to teams
+# source=filename_csv_teams_upload
+# destination=('https://genesiscare.sharepoint.com/sites/NSWPhysics/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FNSWPhysics%2FShared%20Documents%2FGeneral%2FPhysics%20Automation%20Scripts%2FPhys%20QA%20dashboard&viewid=c7ce78ed%2D72ef%2D4db2%2D8e82%2D90301e2f0746&OR=Teams%2DHL&CT=1642733004379&params=%7B%22AppName%22%3A%22Teams%2DDesktop%22%2C%22AppVersion%22%3A%2227%2F21110108720%22%7D/test.csv')
+# sl.copy(source,destination)
+
+# # find upload button on teams webpage
+# upload_button = driver.find_elements(By.XPATH,"//span[text()='Upload']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+# upload_button[0].click()
+# time.sleep(5)
+# files_button = driver.find_elements(By.XPATH,"//span[text()='Files']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+# files_button[0].click()
+# time.sleep(5)
+
+# #upload file to teams
+# #idea is here that once the window pops up, the curser is active at filename and i can blindly type filename by press keyboard as a robot and then click enter
+# # selenium works only for browser and file explorer is not a browser
+# # 'autoit' only works when --headless mode is inactive-> browser needs to pop up so that autoit works. it means i cannot run code in background.
+# # i try to find a workaround to be able to type keyboard keys blindly and press enter and hopefully i can run in --headless mode.-> it doesn't seem to work this way
+# pyautogui.typewrite('C:\\Users\\public\\python_work\\aqua_planning_departure_board.csv') 
+# pyautogui.press('enter') #Presses enter
+
+# #handle = "[CLASS:#32770; TITLE:Open]"
+# #autoit.win_wait(handle, 60)
+# #autoit.control_set_text(handle, "Edit1", filename_csv_teams_upload)
+# #time.sleep(2)
+# #autoit.control_click(handle, "Button1")
+# time.sleep(10)
+
+# #teams: if file is already uploaded, then a window pops up whether the file needs to be replace or both kept (if file with same naming convention is detected)
+# # could add an if function to check whether file is there or not
+# replace_button = driver.find_elements(By.XPATH,"//span[text()='Replace']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+# replace_button[0].click()
+# time.sleep(10)
+
+
+## get the verison of chrome driver
+#from win32com.client import Dispatch
+#def get_version_via_com(filename):
+#    parser = Dispatch("Scripting.FileSystemObject")
+#    try:
+#        version = parser.GetFileVersion(filename)
+#    except Exception:
+#        return None
+#    return version
+#if __name__ == "__main__":
+#    paths = [r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+#             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"]
+#    version = list(filter(None, [get_version_via_com(p) for p in paths]))[0]
+#    print(version)
+
+# driver quit
+driver.quit()
+# timer ends
+print("--- %s seconds ---" % (time.time() - start_time))
+print("python code is finished")
+
+# clear all variables
+#get_ipython().magic('reset -sf')
+
+#TO-DO List:
+# scheduling test, run in logout mode/background
