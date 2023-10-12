@@ -6,6 +6,5 @@ created python code to extract information from Aqua which is a platform to perf
 
 Additionally, extracted information from a planning departure dashboard which displays the state of treatment plans.
 
-![image](https://github.com/felixbockel/gc_aqua_code/assets/128773755/df5fd086-a2bf-4bd0-bb1e-9f88bfe344de)
-
+![image](https://github.com/felixbockel/gc_aqua_code/assets/128773755/8269718e-3d40-405a-ad51-d895b75d6847)
 
