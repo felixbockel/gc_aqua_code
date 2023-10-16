@@ -1,0 +1,170 @@
+#! /usr/bin/python
+from selenium.webdriver.chrome.options import Options
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.support import expected_conditions
+import webbrowser
+import sys
+import gc
+#import python libraries
+import numpy
+from pandas import *
+import pyautogui
+import autoit # 
+
+# Idea:
+# - Extract compliance report
+
+# all machine names in NSW aqua server2
+reference_machine_names_review_aqua=['NSW_Norwest_Amaroo','NSW_Concord_Centaur','NSW_Hurstville_Banksia','NSW_Hurstville_Jacaranda',
+                                    'NSW_Kingswood_Redgum','NSW_MUH_Jupiter',
+                                    'NSW_Newcastle_Lakeside','NSW_Newcastle_Oceanview','NSW_Maitland_Riverside',
+                                    'NSW_StVincents_Buzz','NSW_StVincents_Jessie','Unity SVC']
+
+#execptions
+ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
+
+### start program ###
+#find URL
+url="http://gcpraqua02.genesiscare.com.au:8080/AQA/#app:reportTabs:report" # link goes to test instance. select machine and run test
+
+#add options to Chrome webpage in clinical mode, when run in test mode just commment '--headless' mode
+options = webdriver.ChromeOptions() # code executes without prompting a window part 1 1 of 3
+#options.add_argument('--headless') # code executes without prompting a window part 2 2 of 3 ####in test mode -> it promts a window -> displays what code is doing
+options.add_argument("--window-size=1440,810")# 1920,1080
+options.add_experimental_option("excludeSwitches", ["enable-automation"])
+options.add_experimental_option('useAutomationExtension', False)
+driver = webdriver.Chrome(options=options) # code executes without prompting a window part 3 3 of 3
+
+driver.get(url) # open aqua in url
+elem = WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "input[placeholder='ACCOUNT NAME']"))) # positive: it waits until input is ready, negative: output comes as a list. Haven't found a way to convert a list to <class 'selenium.webdriver.remote.webelement.WebElement'>. therefore i need to add another line here
+elem = driver.find_element(By.CSS_SELECTOR,"input[placeholder='ACCOUNT NAME']")# it has found username
+elem.send_keys("ADMIN") # add username
+elem1 = WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "input[type='password']")))
+elem1 = driver.find_element(By.CSS_SELECTOR,"input[type='password']")# it has found password!!
+elem1.send_keys("gadmin") # add password
+login_button = WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "button")))
+login_button = driver.find_element(By.CSS_SELECTOR,"button") # it has found the log in button
+login_button.click() # it has clicked the log in button and opened aqua
+time.sleep(10) # time to let chrome open aqua before continuing with code
+### login is successful, from here have full access to AQUA ###
+### get passing result from 'review tab'###
+# there is no need to re-login when url is changed, when already logged into aqua
+
+#counter_dataframe_loc=0
+counter_save_data_to_excel=0
+get_name_test_review_aqua_to_dataframe=[]
+get_name_test_review_aqua=[]
+counter_machine_name=2 # the button to get the machine names for each test instance at test review in aqua starts with 7 and increases by 10 each time a new test is clicked on and increases by 5 everytime a new machine is clicked on  
+dataframe_aqua_dashboard=[]
+get_machine_name_of_test_review_aqua_pre=[]
+#find correct report (1st for-loop), then machine name (2nd for-loop) and lastly continue to pull data
+compliance_report_button=("//option[text()='Compliance']")
+print(compliance_report_button)
+try:
+    click_compliance_report_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, compliance_report_button)))
+    click_compliance_report_button.click()
+except :
+    print("error: cannot find compliance button")
+
+time.sleep(5)# otherwise it might not go into second loop. I could try 1 second instead of 2
+  
+# get machine name and compare to reference list
+#counter_machine_name=counter_machine_name+5
+#print('counter_machine_name',counter_machine_name)
+
+# getting machine names of this particualr test instance
+get_machine_name_of_compliance_report_pre_pre = WebDriverWait(driver,5,ignored_exceptions=ignored_exceptions)\
+                    .until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR, "select[tabindex]")))
+get_machine_name_of_compliance_report_pre_pre = driver.find_elements(By.CSS_SELECTOR,"select[tabindex]")
+get_machine_name_of_compliance_report_pre_pre=get_machine_name_of_compliance_report_pre_pre[1].text
+get_machine_name_of_compliance_report_pre=get_machine_name_of_compliance_report_pre_pre.split('\n') # all machine names are put into a list
+    
+#     reference_option_value_test_instance_machine_name=("select[tabindex='7']")
+#     first_part, second_part = reference_option_value_test_instance_machine_name.split('=')
+#     third_part=second_part.split(']')
+#     option_value_test_instances=first_part+'='+"'"+str(counter_machine_name)+"'"+']' # get machine name
+#     print(option_value_test_instances)
+#     get_machine_name_of_test_review_aqua_pre = driver.find_element_by_css_selector(option_value_test_instances).text # next one is 12
+#     get_machine_name_of_test_review_aqua_pre=get_machine_name_of_test_review_aqua_pre.split('\n') # to be able to separate strings and convert them into a list
+get_machine_name_of_compliance_report_pre.pop(0) # remove first item of list-> it is "Select" and no need to include that into loop 
+#print(len(get_machine_name_of_test_review_aqua_pre))
+if len(get_machine_name_of_compliance_report_pre) == 0:#if size of list is not empty, then...
+    print("no machine name found in the list of machine names")
+# find machine name and follow-up with pulling data
+else:
+    counter_first_loop=0
+    test=['NSW_Norwest_Amaroo']
+    #for i in range(len(reference_machine_names_review_aqua)):
+    for i in range(len(test)):
+        counter_first_loop=counter_first_loop+1
+        reference_option_value_test_instance_machine_name_click_button=("//option[text()='Intercom MRL - Unity SVC']")
+        first_part, second_part = reference_option_value_test_instance_machine_name_click_button.split('=')
+        third_part=second_part.split(']')
+        option_value_test_instances=first_part+'='+"'"+reference_machine_names_review_aqua[i]+"'"+']'
+        click_select_machinename_button_run = driver.find_element(By.XPATH,option_value_test_instances)
+        click_select_machinename_button_run.click()
+        time.sleep(5)# otherwise it might not go into second loop. I could try 1 second instead of 2
+      
+        # select date range
+        select_dateinput = WebDriverWait(driver,5,ignored_exceptions=ignored_exceptions)\
+                        .until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']")))
+        select_dateinput = driver.find_elements(By.CSS_SELECTOR,"input[type='text']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+        select_dateinput1=select_dateinput[6] # date 1 is 6, date 2 is 7 and down days is 8
+        select_dateinput1.click()  # Focus input field
+        time.sleep(2)# otherwise it might not go into second loop. I could try 1 second instead of 2
+        # first day of the month
+        click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+        click_confirm_date[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+        time.sleep(1) # time to let chrome open aqua before continuing with code
+        select_dateinput2=select_dateinput[7]
+        select_dateinput2.click()                      # Focus input field
+        time.sleep(2) # time to let chrome open aqua before continuing with code
+        #last day of the month
+        click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+        value_end_of_month=click_confirm_date[-1].text # [-1] -> return the last date of the calendar of the month which is 30th or 31st
+        #print(value_end_of_month)
+        click_confirm_date[-1].click() # [-1] -> click the last date of the calendar of the month which is 30th or 31st
+        # enter # of down days -> only enter down days once otherwise, it'll be added to the tail.
+        if counter_first_loop==1:
+            select_down_days=select_dateinput[8]
+            select_down_days.send_keys("10")
+            select_down_days.click()                      # Focus input field
+            time.sleep(2) # time to let chrome open aqua before continuing with code
+        
+        all_buttons = driver.find_elements(By.CSS_SELECTOR,"button") # it has found the log in button
+        all_buttons[19].click() # clicks on generate to create a PDF file
+        time.sleep(10)
+        
+        
+        srtHandle = driver.window_handles
+        window_before = driver.window_handles[0]
+        window_after = driver.window_handles[1]
+        driver.switch_to.window(window_after)
+        
+        time.sleep(5)
+        pyautogui.hotkey('ctrl','s') # opens popup window to save file
+        filename='W:\\Physics\\07_Staff\\fb\\aqua_stuff\\aqua_compliance_report\\'+test[i]+'.'+'pdf'
+        
+        time.sleep(5)
+        handle = 'Save As'
+        autoit.win_wait(handle, 2)
+        autoit.control_set_text(handle, "Edit1", filename)
+        autoit.control_click(handle, "Button1")
+        
+        time.sleep(5)
+        pyautogui.leftClick()
+        time.sleep(5)
+        #pyautogui.click(button=2) # left mouse click
+        pyautogui.hotkey('enter') # clicks on save on popup file
+        time.sleep(5)
+        pyautogui.hotkey('enter') # clicks on save on popup file
+        time.sleep(5)
+        
+  
