@@ -6,7 +6,7 @@ created python code to extract information from Aqua which is a platform to perf
 ![image](https://github.com/felixbockel/gc_aqua_code/assets/128773755/4b231343-2f46-4744-97fd-cfce87925fc8)
 
 ### Code
-"python_aqua_dashboard_save_to_csv" and "python_aqua_pull_mlc_leaf_positioning_results"
+"python_aqua_dashboard_save_to_csv", "python_aqua_pull_mlc_leaf_positioning_results" and "python_aqua_compliance_report"
 
 ## Departure Dashboard
 
