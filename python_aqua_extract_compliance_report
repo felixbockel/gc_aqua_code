@@ -1,4 +1,11 @@
 #! /usr/bin/python
+# import requests
+# import json
+import time
+from fake_useragent import UserAgent
+# from timeit import default_timer as timer
+from random_user_agent.user_agent import UserAgent
+# from random_user_agent.params import SoftwareName, OperatingSystem
 from selenium.webdriver.chrome.options import Options
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -9,17 +16,42 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.support import expected_conditions
+
 import webbrowser
+
 import sys
 import gc
+# change directory
+import glob
+from pypdf import PdfReader
+import os
+import shutil
+
 #import python libraries
 import numpy
 from pandas import *
+# # Import the plotting library 
+# import matplotlib.pyplot as plt 
+# from matplotlib.backends.backend_pdf import PdfPages
+# import openpyxl
+# from openpyxl import load_workbook
+# from openpyxl.utils.dataframe import dataframe_to_rows
+
+# #download data for today's date automatically
+from datetime import datetime, timedelta
+from datetime import date
+
 import pyautogui
-import autoit # 
+import autoit 
+
+# clear all variables
+from IPython import get_ipython 
 
 # Idea:
 # - Extract compliance report
+
+start_time = time.time()
+# which is in alignment of 'test_numbers_review_aqua'
 
 # all machine names in NSW aqua server2
 reference_machine_names_review_aqua=['NSW_Norwest_Amaroo','NSW_Concord_Centaur','NSW_Hurstville_Banksia','NSW_Hurstville_Jacaranda',
@@ -27,11 +59,33 @@ reference_machine_names_review_aqua=['NSW_Norwest_Amaroo','NSW_Concord_Centaur',
                                     'NSW_Newcastle_Lakeside','NSW_Newcastle_Oceanview','NSW_Maitland_Riverside',
                                     'NSW_StVincents_Buzz','NSW_StVincents_Jessie','Unity SVC']
 
+# all machine names in NSW aqua server3
+reference_machine_names_review_aqua_prod3=['NSW_Mater_Apollo','NSW_Mater_Athena','NSW_GCNS_Warrawal']
+
+old_file_path_and_file="W:\\Physics\\07_Staff\\fb\\aqua_stuff\\aqua_compliance_report\\NSW_Norwest_Amaroo.pdf"
+old_file_path="W:\\Physics\\07_Staff\\fb\\aqua_stuff\\aqua_compliance_report\\"
+new_path="C:\\Users\\felix.bockelmann\\python_work\\"
+file_to_look_for="C:\\Users\\felix.bockelmann\\python_work\\NSW_Norwest_Amaroo.pdf"
+
+# month in Aqua calendar
+month_str_ref=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
 #execptions
 ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
 
-### start program ###
-#find URL
+# program starts here
+### extract complaince report ###
+
+# important
+# -cannot run this script in headless mode -> cause there is a stage within the script where it needs to do clicks/data entry on a popup window
+
+# date input -> for later use
+#print('input form should come up now!')
+print('Please enter below a 2 digit number that represents the month that you want to extract from Aqua as part of compliance report. Input is as follows such as 01 for January or 12 for December')
+number_month = int(input("Enter a 2 digit number here: "))
+
+
+### start aqua production server 2 ### 
 url="http://gcpraqua02.genesiscare.com.au:8080/AQA/#app:reportTabs:report" # link goes to test instance. select machine and run test
 
 #add options to Chrome webpage in clinical mode, when run in test mode just commment '--headless' mode
@@ -41,6 +95,248 @@ options.add_argument("--window-size=1440,810")# 1920,1080
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
 options.add_experimental_option('useAutomationExtension', False)
 driver = webdriver.Chrome(options=options) # code executes without prompting a window part 3 3 of 3
+
+
+
+driver.get(url) # open aqua in url
+elem = WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "input[placeholder='ACCOUNT NAME']"))) # positive: it waits until input is ready, negative: output comes as a list. Haven't found a way to convert a list to <class 'selenium.webdriver.remote.webelement.WebElement'>. therefore i need to add another line here
+elem = driver.find_element(By.CSS_SELECTOR,"input[placeholder='ACCOUNT NAME']")# it has found username
+elem.send_keys("ADMIN") # add username
+elem1 = WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "input[type='password']")))
+elem1 = driver.find_element(By.CSS_SELECTOR,"input[type='password']")# it has found password!!
+elem1.send_keys("gadmin") # add password
+login_button = WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "button")))
+login_button = driver.find_element(By.CSS_SELECTOR,"button") # it has found the log in button
+login_button.click() # it has clicked the log in button and opened aqua
+time.sleep(10) # time to let chrome open aqua before continuing with code
+### login is successful, from here have full access to AQUA ###
+### get passing result from 'review tab'###
+# there is no need to re-login when url is changed, when already logged into aqua
+
+#counter_dataframe_loc=0
+counter_save_data_to_excel=0
+get_name_test_review_aqua_to_dataframe=[]
+get_name_test_review_aqua=[]
+counter_machine_name=2 # the button to get the machine names for each test instance at test review in aqua starts with 7 and increases by 10 each time a new test is clicked on and increases by 5 everytime a new machine is clicked on  
+dataframe_aqua_dashboard=[]
+get_machine_name_of_test_review_aqua_pre=[]
+#find correct report (1st for-loop), then machine name (2nd for-loop) and lastly continue to pull data
+compliance_report_button=("//option[text()='Compliance']")
+print(compliance_report_button)
+try:
+    click_compliance_report_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, compliance_report_button)))
+    click_compliance_report_button.click()
+except :
+    print("error: cannot find compliance button")
+
+time.sleep(5)# otherwise it might not go into second loop. I could try 1 second instead of 2
+  
+# getting machine names of this particualr test instance
+get_machine_name_of_compliance_report_pre_pre = WebDriverWait(driver,5,ignored_exceptions=ignored_exceptions)\
+                    .until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR, "select[tabindex]")))
+get_machine_name_of_compliance_report_pre_pre = driver.find_elements(By.CSS_SELECTOR,"select[tabindex]")
+get_machine_name_of_compliance_report_pre_pre=get_machine_name_of_compliance_report_pre_pre[1].text
+get_machine_name_of_compliance_report_pre=get_machine_name_of_compliance_report_pre_pre.split('\n') # all machine names are put into a list
+    
+get_machine_name_of_compliance_report_pre.pop(0) # remove first item of list-> it is "Select" and no need to include that into loop 
+#print(len(get_machine_name_of_test_review_aqua_pre))
+if len(get_machine_name_of_compliance_report_pre) == 0:#if size of list is empty, then...
+    print("no machine name found in the list of machine names")
+# find machine name and follow-up with pulling data
+else:
+    counter_first_loop=0
+    #test=['NSW_Norwest_Amaroo','NSW_Concord_Centaur'] # delete this when running in clincial mode
+    for i in range(len(reference_machine_names_review_aqua)):
+    #for i in range(len(test)): # delete this when running in clincial mode
+        counter_first_loop=counter_first_loop+1
+        reference_option_value_test_instance_machine_name_click_button=("//option[text()='Intercom MRL - Unity SVC']")
+        first_part, second_part = reference_option_value_test_instance_machine_name_click_button.split('=')
+        third_part=second_part.split(']')
+        option_value_test_instances=first_part+'='+"'"+reference_machine_names_review_aqua[i]+"'"+']'
+        click_select_machinename_button_run = driver.find_element(By.XPATH,option_value_test_instances)
+        click_select_machinename_button_run.click()
+        time.sleep(5)# otherwise it might not go into second loop. I could try 1 second instead of 2
+      
+        # select date range
+        select_dateinput = WebDriverWait(driver,5,ignored_exceptions=ignored_exceptions)\
+                        .until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']")))
+        select_dateinput = driver.find_elements(By.CSS_SELECTOR,"input[type='text']") # it has found the log in button ->[5] is date1 at test results, [6] is date2 at test results
+        select_dateinput1=select_dateinput[6] # date 1 is 6, date 2 is 7 and down days is 8
+        select_dateinput1.click()  # Focus input field
+        time.sleep(2)
+        
+        # enter # of down days -> only enter down days once otherwise, it'll be added to the tail.
+        if counter_first_loop==1:
+            # find the right month in the calendar        
+            month_ref_to_compare=month_str_ref[number_month-1]
+            click_find_date_title = WebDriverWait(driver,5,ignored_exceptions=ignored_exceptions)\
+                            .until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR,"div[class='datePickerTitle']")))
+            click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+            #print(click_find_date_title)
+            time.sleep(1)
+            first_part_str_month, second_part = click_find_date_title.split(' ')
+            #print(first_part_str_month)
+            # if month in correct click on 1st and last day of month, otherwise find correct month first and then click on the days
+            if first_part_str_month == month_ref_to_compare:  
+                # first day of the month
+                click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+                click_confirm_date[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+                time.sleep(1) # time to let chrome open aqua before continuing with code
+                select_dateinput2=select_dateinput[7]
+                select_dateinput2.click()                      # Focus input field
+                time.sleep(2) # time to let chrome open aqua before continuing with code
+                # click on months until the right one appears
+                for i in enumerate(month_str_ref):
+                    click_find_button_click_previous_month = driver.find_element(By.CSS_SELECTOR,"button[class='aqua-dateHeaderButton prevmonth']") # find date input field
+                    click_find_button_click_previous_month.click()
+                    time.sleep(1)
+                    click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+                    first_part_str_month, second_part = click_find_date_title.split(' ')
+                    if first_part_str_month == month_ref_to_compare: 
+                        break
+                time.sleep(1) # time to let chrome open aqua before continuing with code
+                #last day of the month
+                click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+                value_end_of_month=click_confirm_date[-1].text # [-1] -> return the last date of the calendar of the month which is 30th or 31st
+                #print(value_end_of_month)
+                click_confirm_date[-1].click() # [-1] -> click the last date of the calendar of the month which is 30th or 31st
+                # # enter # of down days -> only enter down days once otherwise, it'll be added to the tail.
+                # if counter_first_loop==1:
+                #     select_down_days=select_dateinput[8]
+                #     select_down_days.send_keys("10")
+                #     select_down_days.click()                      # Focus input field
+                #     time.sleep(2) # time to let chrome open aqua before continuing with code
+            else:
+                # click on months until the right one appears
+                for ii in enumerate(month_str_ref):
+                    click_find_button_click_previous_month = driver.find_element(By.CSS_SELECTOR,"button[class='aqua-dateHeaderButton prevmonth']") # find date input field
+                    click_find_button_click_previous_month.click()
+                    time.sleep(1)
+                    click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+                    first_part_str_month, second_part = click_find_date_title.split(' ')
+                    if first_part_str_month == month_ref_to_compare: 
+                        break
+                # first day of the month
+                click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+                click_confirm_date[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+                time.sleep(1) # time to let chrome open aqua before continuing with code
+                select_dateinput2=select_dateinput[7]
+                select_dateinput2.click()                      # Focus input field
+                time.sleep(2) # time to let chrome open aqua before continuing with code
+                # click on months until the right one appears
+                for ii in enumerate(month_str_ref):
+                    click_find_button_click_previous_month = driver.find_element(By.CSS_SELECTOR,"button[class='aqua-dateHeaderButton prevmonth']") # find date input field
+                    click_find_button_click_previous_month.click()
+                    time.sleep(1)
+                    click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+                    first_part_str_month, second_part = click_find_date_title.split(' ')
+                    if first_part_str_month == month_ref_to_compare: 
+                        break
+                time.sleep(1) # time to let chrome open aqua before continuing with code
+                #last day of the month
+                click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+                value_end_of_month=click_confirm_date[-1].text # [-1] -> return the last date of the calendar of the month which is 30th or 31st
+                #print(value_end_of_month)
+                click_confirm_date[-1].click() # [-1] -> click the last date of the calendar of the month which is 30th or 31st
+                # # enter # of down days -> only enter down days once otherwise, it'll be added to the tail.
+                # if counter_first_loop==1:
+                #     select_down_days=select_dateinput[8]
+                #     select_down_days.send_keys("10")
+                #     select_down_days.click()                      # Focus input field
+                #     time.sleep(2) # time to let chrome open aqua before continuing with code
+        
+        # click confirm button to print report, save as action follows
+        all_buttons = driver.find_elements(By.CSS_SELECTOR,"button") # it has found the log in button
+        all_buttons[19].click() # clicks on generate to create a PDF file
+        time.sleep(10)
+        
+        # popup window appears, file needs to be saved as pdg and in directory
+        srtHandle = driver.window_handles
+        window_before = driver.window_handles[0]
+        window_after = driver.window_handles[-1]
+        driver.switch_to.window(window_after)
+        
+        time.sleep(5)
+        pyautogui.hotkey('ctrl','s') # opens popup window to save file
+        
+        time.sleep(5)
+        # delete test from for loop when running in clincial mode
+        # filename='W:\\Physics\\07_Staff\\fb\\aqua_stuff\\aqua_compliance_report\\'+test[i]+'.'+'pdf'
+        filename='W:\\Physics\\07_Staff\\fb\\aqua_stuff\\aqua_compliance_report\\'+reference_machine_names_review_aqua[i]+'.'+'pdf'    
+
+        time.sleep(5)
+        handle = 'Save As'
+        autoit.win_wait(handle, 2)
+        autoit.control_set_text(handle, "Edit1", filename)
+        #autoit.control_click(handle, "Button1")
+        
+        # perform random clicks on popup window which is primarily used (first window)
+        # time.sleep(5)
+        # pyautogui.leftClick()
+        time.sleep(5)
+        #pyautogui.click(button=2) # left mouse click
+        pyautogui.hotkey('enter') # clicks on save on popup file-> press enter to save new file
+        time.sleep(5)
+        pyautogui.press('y') # press s key
+        time.sleep(5)
+        pyautogui.hotkey('enter') # clicks on save on popup file -> in case overwrite needs to be confirmed
+        time.sleep(5)
+        pyautogui.hotkey('enter') # clicks on save on popup file -> in case overwrite needs to be confirmed
+        # switch back to old window
+        time.sleep(5)
+        driver.switch_to.window(window_before)
+        
+time.sleep(10) # just to make sure that all files are saved in directory before moving to next stage       
+### check pdf and extract downdays ###
+# move file to python diretory and convert pdf to string. then find number in string and double-check if it is the right one.
+if os.path.isfile(old_file_path_and_file) == True:
+    shutil.move(old_file_path_and_file, new_path) # file is moved out of original path to new path
+    print('firt if')
+    time.sleep(10) # it takes time to move the file from one directory to another
+    if os.path.isfile(file_to_look_for) == True:
+        print('second if')
+        reader = PdfReader(file_to_look_for)
+        text = ""
+        for page in reader.pages: 
+            text += page.extract_text() + "\n"
+        text_range=text[920:1050] # text range in case indexing changes in the pdf and numbers are not where there supposed to be.
+        #print(text[920:1050])      
+        list_numbers=[int(list_numbers) for list_numbers in text_range.split() if list_numbers.isdigit()]
+        #print(list_numbers)
+        if list_numbers == 0:
+            print('no numbers found, program stops here. please check PDF')
+            exit() # stop program
+        else:
+            shutil.move(file_to_look_for, old_file_path) # move file back to original directory
+    else:
+        print('extent timer maybe and restart.')
+        exit() # stop program
+elif os.path.isfile(file_to_look_for) == True:
+    print('second if')
+    reader = PdfReader(file_to_look_for)
+    text = ""
+    for page in reader.pages: 
+        text += page.extract_text() + "\n"
+    text_range=text[920:1050] # text range in case indexing changes in the pdf and numbers are not where there supposed to be.
+    #print(text[920:1050])      
+    list_numbers=[int(list_numbers) for list_numbers in text_range.split() if list_numbers.isdigit()]
+    #print(list_numbers)
+    if list_numbers == 0:
+        print('no numbers found, program stops here. please check PDF')
+        exit() # stop program
+    else:
+        shutil.move(file_to_look_for, old_file_path) # move file back to original directory
+else:
+    print('file does not exist')
+    exit() # stop program
+
+#print(list_numbers[1])       
+down_days_enter_into_prod3=int(value_end_of_month)-list_numbers[1]
+
+### get compliance report from production server 3 ####
+time.sleep(10) # wait 10 secs and start prod3
+#start aqua production server 2 
+url="http://gcpraqua03.genesiscare.com.au:8080/AQA/#app:reportTabs:report" # link goes to test instance. select machine and run test
 
 driver.get(url) # open aqua in url
 elem = WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "input[placeholder='ACCOUNT NAME']"))) # positive: it waits until input is ready, negative: output comes as a list. Haven't found a way to convert a list to <class 'selenium.webdriver.remote.webelement.WebElement'>. therefore i need to add another line here
@@ -85,14 +381,6 @@ get_machine_name_of_compliance_report_pre_pre = WebDriverWait(driver,5,ignored_e
 get_machine_name_of_compliance_report_pre_pre = driver.find_elements(By.CSS_SELECTOR,"select[tabindex]")
 get_machine_name_of_compliance_report_pre_pre=get_machine_name_of_compliance_report_pre_pre[1].text
 get_machine_name_of_compliance_report_pre=get_machine_name_of_compliance_report_pre_pre.split('\n') # all machine names are put into a list
-    
-#     reference_option_value_test_instance_machine_name=("select[tabindex='7']")
-#     first_part, second_part = reference_option_value_test_instance_machine_name.split('=')
-#     third_part=second_part.split(']')
-#     option_value_test_instances=first_part+'='+"'"+str(counter_machine_name)+"'"+']' # get machine name
-#     print(option_value_test_instances)
-#     get_machine_name_of_test_review_aqua_pre = driver.find_element_by_css_selector(option_value_test_instances).text # next one is 12
-#     get_machine_name_of_test_review_aqua_pre=get_machine_name_of_test_review_aqua_pre.split('\n') # to be able to separate strings and convert them into a list
 get_machine_name_of_compliance_report_pre.pop(0) # remove first item of list-> it is "Select" and no need to include that into loop 
 #print(len(get_machine_name_of_test_review_aqua_pre))
 if len(get_machine_name_of_compliance_report_pre) == 0:#if size of list is not empty, then...
@@ -100,14 +388,14 @@ if len(get_machine_name_of_compliance_report_pre) == 0:#if size of list is not e
 # find machine name and follow-up with pulling data
 else:
     counter_first_loop=0
-    test=['NSW_Norwest_Amaroo']
-    #for i in range(len(reference_machine_names_review_aqua)):
-    for i in range(len(test)):
+    #test=['NSW_Norwest_Amaroo'] # delete this when running in clincial mode
+    for i in range(len(reference_machine_names_review_aqua_prod3)):
+    #for i in range(len(test)): # delete this when running in clincial mode
         counter_first_loop=counter_first_loop+1
         reference_option_value_test_instance_machine_name_click_button=("//option[text()='Intercom MRL - Unity SVC']")
         first_part, second_part = reference_option_value_test_instance_machine_name_click_button.split('=')
         third_part=second_part.split(']')
-        option_value_test_instances=first_part+'='+"'"+reference_machine_names_review_aqua[i]+"'"+']'
+        option_value_test_instances=first_part+'='+"'"+reference_machine_names_review_aqua_prod3[i]+"'"+']'
         click_select_machinename_button_run = driver.find_element(By.XPATH,option_value_test_instances)
         click_select_machinename_button_run.click()
         time.sleep(5)# otherwise it might not go into second loop. I could try 1 second instead of 2
@@ -119,52 +407,135 @@ else:
         select_dateinput1=select_dateinput[6] # date 1 is 6, date 2 is 7 and down days is 8
         select_dateinput1.click()  # Focus input field
         time.sleep(2)# otherwise it might not go into second loop. I could try 1 second instead of 2
-        # first day of the month
-        click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
-        click_confirm_date[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
-        time.sleep(1) # time to let chrome open aqua before continuing with code
-        select_dateinput2=select_dateinput[7]
-        select_dateinput2.click()                      # Focus input field
-        time.sleep(2) # time to let chrome open aqua before continuing with code
-        #last day of the month
-        click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
-        value_end_of_month=click_confirm_date[-1].text # [-1] -> return the last date of the calendar of the month which is 30th or 31st
-        #print(value_end_of_month)
-        click_confirm_date[-1].click() # [-1] -> click the last date of the calendar of the month which is 30th or 31st
+
         # enter # of down days -> only enter down days once otherwise, it'll be added to the tail.
         if counter_first_loop==1:
-            select_down_days=select_dateinput[8]
-            select_down_days.send_keys("10")
-            select_down_days.click()                      # Focus input field
-            time.sleep(2) # time to let chrome open aqua before continuing with code
+            # find the right month in the calendar               
+            month_ref_to_compare=month_str_ref[number_month-1]
+            click_find_date_title = WebDriverWait(driver,5,ignored_exceptions=ignored_exceptions)\
+                            .until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR,"div[class='datePickerTitle']")))
+            click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+            #print(click_find_date_title)
+            time.sleep(1)
+            if first_part_str_month == month_ref_to_compare: 
+                # click on months until the right one appears
+                for ii in enumerate(month_str_ref):
+                    click_find_button_click_previous_month = driver.find_element(By.CSS_SELECTOR,"button[class='aqua-dateHeaderButton prevmonth']") # find date input field
+                    click_find_button_click_previous_month.click()
+                    time.sleep(1)
+                    click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+                    first_part_str_month, second_part = click_find_date_title.split(' ')
+                    if first_part_str_month == month_ref_to_compare: 
+                        break
+                # first day of the month
+                click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+                click_confirm_date[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+                time.sleep(1) # time to let chrome open aqua before continuing with code
+                select_dateinput2=select_dateinput[7]
+                select_dateinput2.click()                      # Focus input field
+                time.sleep(2) # time to let chrome open aqua before continuing with code
+                # click on months until the right one appears
+                for ii in enumerate(month_str_ref):
+                    click_find_button_click_previous_month = driver.find_element(By.CSS_SELECTOR,"button[class='aqua-dateHeaderButton prevmonth']") # find date input field
+                    click_find_button_click_previous_month.click()
+                    time.sleep(1)
+                    click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+                    first_part_str_month, second_part = click_find_date_title.split(' ')
+                    if first_part_str_month == month_ref_to_compare: 
+                        break
+                time.sleep(1) # time to let chrome open aqua before continuing with code
+                #last day of the month
+                click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+                value_end_of_month=click_confirm_date[-1].text # [-1] -> return the last date of the calendar of the month which is 30th or 31st
+                #print(value_end_of_month)
+                click_confirm_date[-1].click() # [-1] -> click the last date of the calendar of the month which is 30th or 31st
+                # enter # of down days -> only enter down days once otherwise, it'll be added to the tail.
+                select_down_days=select_dateinput[8]
+                select_down_days.send_keys(down_days_enter_into_prod3)
+                select_down_days.click()                      # Focus input field
+                time.sleep(2) # time to let chrome open aqua before continuing with code
+            else:
+                # click on months until the right one appears
+                for ii in enumerate(month_str_ref):
+                    click_find_button_click_previous_month = driver.find_element(By.CSS_SELECTOR,"button[class='aqua-dateHeaderButton prevmonth']") # find date input field
+                    click_find_button_click_previous_month.click()
+                    time.sleep(1)
+                    click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+                    first_part_str_month, second_part = click_find_date_title.split(' ')
+                    if first_part_str_month == month_ref_to_compare: 
+                        break
+                # first day of the month
+                click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+                click_confirm_date[0].click() # [0] -> clicks on first day of the month # list contains all dates -> i could get a specific date! for this case it is the first one which is 1st
+                time.sleep(1) # time to let chrome open aqua before continuing with code
+                select_dateinput2=select_dateinput[7]
+                select_dateinput2.click()                      # Focus input field
+                time.sleep(2) # time to let chrome open aqua before continuing with code
+                # click on months until the right one appears
+                for ii in enumerate(month_str_ref):
+                    click_find_button_click_previous_month = driver.find_element(By.CSS_SELECTOR,"button[class='aqua-dateHeaderButton prevmonth']") # find date input field
+                    click_find_button_click_previous_month.click()
+                    time.sleep(1)
+                    click_find_date_title= driver.find_element(By.CSS_SELECTOR,"div[class='datePickerTitle']").text # find date input field
+                    first_part_str_month, second_part = click_find_date_title.split(' ')
+                    if first_part_str_month == month_ref_to_compare: 
+                        break
+                time.sleep(1) # time to let chrome open aqua before continuing with code
+                #last day of the month
+                click_confirm_date = driver.find_elements(By.CSS_SELECTOR,"div[class='gwt-Label']") # find date input field
+                value_end_of_month=click_confirm_date[-1].text # [-1] -> return the last date of the calendar of the month which is 30th or 31st
+                #print(value_end_of_month)
+                click_confirm_date[-1].click() # [-1] -> click the last date of the calendar of the month which is 30th or 31st
+                # enter # of down days -> only enter down days once otherwise, it'll be added to the tail.
+                select_down_days=select_dateinput[8]
+                select_down_days.send_keys(down_days_enter_into_prod3)
+                select_down_days.click()                      # Focus input field
+                time.sleep(2) # time to let chrome open aqua before continuing with code
         
+        # click confirm button to print report, save as action follows
         all_buttons = driver.find_elements(By.CSS_SELECTOR,"button") # it has found the log in button
         all_buttons[19].click() # clicks on generate to create a PDF file
         time.sleep(10)
         
-        
+        # popup window appears, file needs to be saved as pdg and in directory
         srtHandle = driver.window_handles
         window_before = driver.window_handles[0]
-        window_after = driver.window_handles[1]
+        window_after = driver.window_handles[-1]
         driver.switch_to.window(window_after)
         
         time.sleep(5)
         pyautogui.hotkey('ctrl','s') # opens popup window to save file
-        filename='W:\\Physics\\07_Staff\\fb\\aqua_stuff\\aqua_compliance_report\\'+test[i]+'.'+'pdf'
         
+        time.sleep(5)
+        # delete test from for loop when running in clincial mode
+        # filename='W:\\Physics\\07_Staff\\fb\\aqua_stuff\\aqua_compliance_report\\'+test[i]+'.'+'pdf'
+        filename='W:\\Physics\\07_Staff\\fb\\aqua_stuff\\aqua_compliance_report\\'+reference_machine_names_review_aqua_prod3[i]+'.'+'pdf'    
+    
         time.sleep(5)
         handle = 'Save As'
         autoit.win_wait(handle, 2)
         autoit.control_set_text(handle, "Edit1", filename)
-        autoit.control_click(handle, "Button1")
+        #autoit.control_click(handle, "Button1")
         
-        time.sleep(5)
-        pyautogui.leftClick()
+        # perform random clicks on popup window which is primarily used (first window)
+        # time.sleep(5)
+        # pyautogui.leftClick()
         time.sleep(5)
         #pyautogui.click(button=2) # left mouse click
-        pyautogui.hotkey('enter') # clicks on save on popup file
+        pyautogui.hotkey('enter') # clicks on save on popup file-> press enter to save new file
         time.sleep(5)
-        pyautogui.hotkey('enter') # clicks on save on popup file
+        pyautogui.press('y') # press s key
         time.sleep(5)
-        
-  
+        pyautogui.hotkey('enter') # clicks on save on popup file -> in case overwrite needs to be confirmed
+        time.sleep(5)
+        pyautogui.hotkey('enter') # clicks on save on popup file -> in case overwrite needs to be confirmed
+        time.sleep(5)
+        driver.switch_to.window(window_before)
+
+driver.quit()
+# timer ends
+print("--- %s seconds ---" % (time.time() - start_time))
+print("python code is finished")
+
+# clear all variables
+get_ipython().magic('reset -sf')
